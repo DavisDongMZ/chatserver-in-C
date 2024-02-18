@@ -1,0 +1,3 @@
+Once you finish q2, populate this via:
+
+cp -r q2/* q3

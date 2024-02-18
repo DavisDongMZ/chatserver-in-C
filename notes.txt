@@ -1,0 +1,23 @@
+Introduction
+This project implements a chat server in C language. The server facilitates communication between multiple clients over a network, allowing them to exchange messages in real-time.
+
+Project Overview
+The server-side implementation primarily focuses on completing the core functionality of the chat server. Key components include handling incoming and outgoing messages, managing client connections, and ensuring concurrency using the select() function.
+
+My Contributions
+In this personal assignment, my responsibilities included completing the following server-side functions:
+
+recvMessage(): Implemented the function to read incoming messages from clients, ensuring correct message parsing and handling of edge cases.
+sendMessage(): Developed the function to send messages to clients, ensuring reliable transmission and error handling.
+main(): Completed the main function responsible for initializing the server, accepting incoming connections, and managing client interactions.
+Challenges
+Throughout the development process, several challenges were encountered, including:
+
+Message Processing: Understanding and implementing the logic for processing incoming messages, including message parsing and validation.
+Socket Programming: Gaining proficiency in socket programming in C, including socket creation, binding, and listening for incoming connections.
+Concurrency Handling: Learning how to manage multiple client connections concurrently using the select() function, where each client is treated as an individual file descriptor.
+Solutions
+To overcome these challenges, extensive research, experimentation, and debugging were conducted. Additionally, leveraging online resources, documentation, and seeking guidance from peers helped in understanding complex concepts and resolving issues effectively.
+
+Conclusion
+Completing the server-side functionality of the chat server project was a rewarding experience, allowing for practical application of networking and system programming concepts in C. The challenges encountered served as valuable learning opportunities, enhancing my skills in software development and problem-solving.
