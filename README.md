@@ -1,5 +1,4 @@
-Server Process
-Introduction
+#Server Process Introduction
 This server process is designed to facilitate communication between clients over a network. It listens for incoming connections, handles message exchanges, and manages user registrations.
 
 Getting Started
