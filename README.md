@@ -2,7 +2,7 @@
 This is an individual assignment in utm csc209, my job was to implement the chatserver.c file in charserver folder. The onwer of the course has the copyright.
 
 ## Server Process Introduction
-This server process is designed to facilitate communication between clients over a network. It listens for incoming connections, handles message exchanges, and manages user registrations.
+This server process is designed to facilitate communication between clients over a network on tcp protocal, but this project only focous on the communication on localhost. It listens for incoming connections, handles message exchanges, and manages user registrations.
 
 ### Getting Started
 
