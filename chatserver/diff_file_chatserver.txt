@@ -1,0 +1,300 @@
+$diff -r chatserverOriginal.c chatServer.c:
+
+17a18,30
+> int max(int a, int b) {
+>     if (a>b)return a;
+>     return b;
+> }
+>
+> struct client {
+>     char user[MAX_USER_LEN+1];
+>       char touser[MAX_USER_LEN+1];
+>     int fd;
+>     char buf[MAX_CHAT_MESSAGE_LEN];
+>     int inbuf;
+>     MessageQueue queue;
+> };
+19c32
+<  * send a single message to client
+---
+>  * send a single message to client
+21c34
+<  * toClient: a buffer containing a null terminated string with length at most
+---
+>  * toClient: a buffer containing a null terminated string with length at most
+28,38c41,55
+<       char c;
+<       int offset = 0;
+<       while (1){
+<               c = toClient[offset];
+<               if(c=='\0')c='\n';
+<               int numSend = send(sfd, &c, 1, 0);
+<               if(numSend!=1)return(2);
+<               if(c=='\n')break;
+<               offset+=1;
+<       }
+<       return(1);
+---
+>     char message[MAX_MESSAGE_LEN];
+>     snprintf(message, MAX_MESSAGE_LEN, "%s\n", toClient);
+>
+>     int len = strlen(message);
+>     int total_sent = 0;
+>     int sent;
+>
+>     while (total_sent < len) {
+>         sent = send(sfd, message + total_sent, len - total_sent, 0);
+>         if (sent < 0) {
+>             return 2; // Error: send failed
+>         }
+>         total_sent += sent;
+>     }
+>     return 1;
+42c59
+<  * read a single message from the client.
+---
+>  * read a single message from the client.
+45c62
+<  *             the message is converted from newline to null terminated,
+---
+>  *             the message is converted from newline to null terminated,
+52,62c69,78
+<       char c;
+<       int len= 0;
+<       while (1){
+<               if(len==MAX_MESSAGE_LEN)return(3);
+<
+<               int numRecv = recv(sfd, &c, 1, 0);
+<               if(numRecv==0)return(2);
+<               if(c=='\n')c='\0';
+<               fromClient[len]=c;
+<               if(c=='\0')return(1);
+<               len+=1;
+---
+>       char buff[MAX_MESSAGE_LEN];
+>       int len = 0;
+>       int total_len = 0;
+>
+>       while (total_len < MAX_MESSAGE_LEN && buff[len-1] != '\n') {
+>               len = recv(sfd, buff + total_len, MAX_MESSAGE_LEN - total_len, 0);
+>               if (len <= 0) {
+>                       return 2; // Error: no data received
+>               }
+>                 total_len += len;
+63a80,92
+>
+>       if (total_len == MAX_MESSAGE_LEN && buff[MAX_MESSAGE_LEN-1] != '\n') {
+>               return 3; // Error: message too long
+>         }
+>
+>       // Replace newline with null terminator
+>       if (buff[len-1] == '\n') {
+>           buff[len-1] = '\0';
+>       } else {
+>           buff[len] = '\0';
+>       }
+>       strcpy(fromClient, buff);
+>       return 1;
+94a124,128
+>     int fdlist[24];
+>     int fdcount=0;
+>     fdlist[fdcount++]=sockfd;
+>     struct client clientList[32];
+>
+96,99c130,141
+<       int newsockfd;
+<         if ((newsockfd = accept (sockfd, NULL, NULL)) == -1) {
+<             perror ("accept call failed");
+<             continue;
+---
+>       fd_set readfds, writefds, exceptfds;
+>         FD_ZERO(&readfds);
+>         FD_ZERO(&writefds);
+>         FD_ZERO(&exceptfds);
+>
+>         int fdmax=0;
+>         for (int i=0; i<fdcount; i++) {
+>             if (fdlist[i]>0) {
+>                 FD_SET(fdlist[i], &readfds);
+>               FD_SET(fdlist[i], &writefds);
+>                 fdmax=max(fdmax,fdlist[i]);
+>             }
+102,114c144,168
+<         if (fork () == 0) {
+<               char user[MAX_USER_LEN+1];
+<               user[0]='\0';
+<
+<               MessageQueue queue;
+<               initQueue(&queue);
+<
+<               char fromClient[MAX_MESSAGE_LEN], toClient[MAX_MESSAGE_LEN];
+<
+<               while(1){
+<                       int retVal=recvMessage(newsockfd, fromClient);
+<                       if(retVal==1){
+<                               // we have a null terminated string from the client
+---
+>         struct timeval tv;
+>         tv.tv_sec=5;
+>         tv.tv_usec=0;
+>
+>       int numfds;
+>       if ((numfds=select(fdmax+1, &readfds, &writefds, &exceptfds, &tv))>0) { // block!!
+>       for (int i=0; i<fdcount; i++) {
+>                 if (FD_ISSET(fdlist[i],&readfds)) {
+>                    if (fdlist[i]==sockfd && fdcount<32) { /*accept a connection */
+>                         int newsockfd;
+>                         if ((newsockfd = accept (sockfd, NULL, NULL)) == -1) {
+>                             perror ("accept call failed");
+>                             continue;
+>                         }
+>                         fdlist[fdcount]=newsockfd;
+>                       strcpy(clientList[fdcount].user, "");
+>                       clientList[fdcount].fd = newsockfd;
+>                       strcpy(clientList[fdcount].buf, "");
+>                       clientList[fdcount].inbuf = 0;
+>                       initQueue(&clientList[fdcount].queue);
+>                       fdcount++;
+>                     } else { /* read from an existing connection: guaranteed 1 non-blocking read */
+>                         char fromClient[MAX_MESSAGE_LEN], toClient[MAX_MESSAGE_LEN];
+>                         int retVal=recvMessage(fdlist[i], fromClient);
+>                         if (retVal==1) {
+119,144c173,182
+<                                       sendMessage(newsockfd, toClient);
+<                               } else if(strcmp(part[0], "list")==0){
+<                                       sprintf(toClient, "users:%s",user);
+<                                       sendMessage(newsockfd, toClient);
+<                               } else if(strcmp(part[0], "message")==0){
+<                                       char *fromUser=part[1];
+<                                       char *toUser=part[2];
+<                                       char *message=part[3];
+<
+<                                       if(strcmp(fromUser, user)!=0){
+<                                               sprintf(toClient, "invalidFromUser:%s",fromUser);
+<                                               sendMessage(newsockfd, toClient);
+<                                       } else if(strcmp(toUser, user)!=0){ // Right now we can only send messages to ourselves!
+<                                               sprintf(toClient, "invalidToUser:%s",toUser);
+<                                               sendMessage(newsockfd, toClient);
+<                                       } else {
+<                                               sprintf(toClient, "%s:%s:%s:%s","message", fromUser, toUser, message);
+<                                               if(enqueue(&queue, toClient)){
+<                                                       strcpy(toClient, "messageQueued");
+<                                                       sendMessage(newsockfd, toClient);
+<                                               }else{
+<                                                       strcpy(toClient, "messageNotQueued");
+<                                                       sendMessage(newsockfd, toClient);
+<                                               }
+<                                       }
+<                               } else if(strcmp(part[0], "quit")==0){
+---
+>                                       sendMessage(fdlist[i], toClient);
+>                               }else if(strcmp(part[0], "list")==0){
+>                                       strcpy(toClient, "users: ");
+>                                       for (int k = 1; k < fdcount; k++) {
+>                                               if(k==fdcount-1||k==10){strcat(toClient, clientList[k].user);break;}
+>                                               strcat(toClient, clientList[k].user);
+>                                               strcat(toClient, ", ");
+>                                       }
+>                                       sendMessage(fdlist[i], toClient);
+>                               }else if(strcmp(part[0], "quit")==0){
+146,148c184,190
+<                                       sendMessage(newsockfd, toClient);
+<                                       close (newsockfd);
+<                                       exit (0);
+---
+>                                       sendMessage(fdlist[i], toClient);
+>                                       close (fdlist[i]);
+>                                       if (i != fdcount-1) {
+>                                               fdlist[i] = fdlist[fdcount-1];
+>                                               clientList[i]=clientList[fdcount-1];
+>                                       }
+>                                       fdcount--;
+150,151c192,193
+<                                       if(dequeue(&queue, toClient)){
+<                                               sendMessage(newsockfd, toClient);
+---
+>                                       if(dequeue(&clientList[i].queue, toClient)){
+>                                               sendMessage(fdlist[i], toClient);
+154c196,215
+<                                               sendMessage(newsockfd, toClient);
+---
+>                                               sendMessage(fdlist[i], toClient);
+>                                       }
+>                               }else if(strcmp(part[0], "message")==0){
+>                                       char *fromUser=part[1];
+>                                       char *toUser=part[2];
+>                                       char *message=part[3];
+>                                       if(strcmp(fromUser, clientList[i].user)!=0){
+>                                                       sprintf(toClient, "invalidFromUser:%s",fromUser);
+>                                                       sendMessage(fdlist[i], toClient);
+>                                                       continue;
+>                                       }for(int start=0; start < fdcount; start++){
+>                                               if(strcmp(toUser, clientList[start].user)==0){
+>                                                       sprintf(clientList[i].buf, "%s:%s:%s:%s","message", fromUser, toUser, message);
+>                                                       sprintf(clientList[i].touser, "%s", toUser);
+>                                                       break;
+>                                               }
+>                                               if(start==fdcount-1){
+>                                                       sprintf(toClient, "invalidToUser:%s",toUser);
+>                                                       sendMessage(fdlist[i], toClient);
+>                                               }
+157,163c218,234
+<                                       if(strncmp(user, part[1], MAX_USER_LEN)!=0){
+<                                               strcpy(user, part[1]);
+<                                               strcpy(toClient, "registered");
+<                                               sendMessage(newsockfd, toClient);
+<                                       } else {
+<                                               strcpy(toClient, "userAlreadyRegistered");
+<                                               sendMessage(newsockfd, toClient);
+---
+>                                       for(int j=1; j<fdcount; j++){
+>                                               if(j!=i){
+>                                                       if(strncmp(clientList[j].user, part[1], MAX_USER_LEN)==0){
+>                                                               strcpy(toClient, "ERROR");
+>                                                               sendMessage(fdlist[i], toClient);
+>                                                               break;
+>                                                       }
+>                                               }else{
+>                                                       if(strncmp(clientList[i].user, part[1], MAX_USER_LEN)!=0){
+>                                                               strcpy(clientList[i].user, part[1]);
+>                                                               strcpy(toClient, "registered");
+>                                                               sendMessage(fdlist[i], toClient);
+>                                                       } else {
+>                                                               strcpy(toClient, "ERROR");
+>                                                               sendMessage(fdlist[i], toClient);
+>                                                       }
+>                                               }
+166,168c237,238
+<                       } else {
+<                               close (newsockfd);
+<                               exit (0);
+---
+>                       }else {
+>                               close (fdlist[i]);
+170c240,259
+<               }
+---
+>                     }
+>                 }else if(FD_ISSET(fdlist[i],&writefds)&&strlen(clientList[i].buf)!=0){
+>                       char  toClient[MAX_MESSAGE_LEN];
+>                       sprintf(toClient, "%s", clientList[i].buf);
+>                       for(int start=1; start < fdcount; start++){
+>                       if(strcmp(clientList[i].touser, clientList[start].user)==0){
+>                               if(enqueue(&clientList[start].queue, toClient)){
+>                                       strcpy(toClient, "messageQueued");
+>                                       sendMessage(fdlist[i], toClient);
+>                               }else{
+>                                       strcpy(toClient, "messageNotQueued");
+>                                       sendMessage(fdlist[i], toClient);
+>                               }
+>                               memset(clientList[i].touser, 0, sizeof(clientList[i].touser));
+>                               memset(clientList[i].buf, 0, sizeof(clientList[i].buf));
+>                               break;
+>                       }
+>                   }
+>                 }
+>             }
+172d260
+<         close (newsockfd);
+174d261
+<     exit(0);
