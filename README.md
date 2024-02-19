@@ -8,6 +8,7 @@ This server process is designed to facilitate communication between clients over
 
 #### To compile and run the server process, follow these steps:
 ```bash
+git clone
 cd chatserver
 make all
 ```
